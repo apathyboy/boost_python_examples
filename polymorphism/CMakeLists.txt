@@ -18,4 +18,5 @@ set_target_properties(testlib
         SUFFIX "${BINDING_SUFFIX}")
 
 target_link_libraries(testlib
-    ${PYTHON_LIBRARIES})
+    ${PYTHON_LIBRARIES}
+    ${Boost_LIBRARIES})

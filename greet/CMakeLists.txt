@@ -35,5 +35,6 @@ set_target_properties(greet_bindings
 
 target_link_libraries(greet_bindings
     greet
-    ${PYTHON_LIBRARIES}    
+    ${PYTHON_LIBRARIES}
+    ${Boost_LIBRARIES}
 )
