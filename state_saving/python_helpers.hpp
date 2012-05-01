@@ -8,25 +8,53 @@
 
 namespace bp = boost::python;
 
-struct aquire_py_GIL {
-	PyGILState_STATE state;
-	aquire_py_GIL() {
-		state = PyGILState_Ensure();
-	}
+class GilMutex
+{
+public:
+    void lock()
+    {
+        state_ = PyGILState_Ensure();
+    }
 
-	~aquire_py_GIL() {
-		PyGILState_Release(state);
-	}
+    void unlock()
+    {
+        PyGILState_Release(state_);
+    }
+
+private:
+    PyGILState_STATE state_;
 };
 
-struct release_py_GIL {
-	PyThreadState *state;
-	release_py_GIL() {
+class ScopedGilLock
+{
+public:
+    ScopedGilLock()
+    {
+        mutex_.lock();
+    }
+
+    ~ScopedGilLock()
+    {
+        mutex_.unlock();
+    }
+
+private:
+    GilMutex mutex_;
+};
+
+struct ScopedGilRelease
+{
+    PyThreadState* state;
+
+    ScopedGilRelease()
+    {
 		state = PyEval_SaveThread();
-	}
-	~release_py_GIL() {
+    }
+
+    ~ScopedGilRelease()
+    {
 		PyEval_RestoreThread(state);
-	}
+    }
 };
 
 class logger {
@@ -53,5 +81,16 @@ void print_py_error() {
 	}
 	PyErr_Clear();
 }
+
+struct PythonDelayedCallback
+{
+    bp::object callback;
+    float delay;
+
+    PythonDelayedCallback(bp::object callback, float delay)
+        : callback(callback)
+        , delay(delay)
+    {}
+};
 
 #endif  // PYTHON_HELPERS_HPP_

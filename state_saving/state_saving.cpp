@@ -1,86 +1,69 @@
 
 #include <iostream>
+#include <mutex>
+
 #include <boost/python.hpp>
 #include <boost/thread.hpp>
 #include "python_helpers.hpp"
 
-#ifdef WIN32
-#define MAIN wmain
-typedef wchar_t unicode_char;
-#else
-#define MAIN main
-typedef char unicode_char;
-#endif
-
 namespace bp = boost::python;
 
-static int delay = 100;
-static int thread_count = 100;
-static int thread_loops = 10;
+logger safe_cout;
 
-void call_python(bp::dict &localDict, int id) {
-    logger safe_cout;
+void CallCommandFunc(int i)
+{
+    // Aquire the GIL lock before any calls to the python api
+    ScopedGilLock gil;
 
-	try {
-		aquire_py_GIL lock;
-		try	{
-			bp::object scriptFunction = bp::extract<bp::object>(localDict["hello_python"]);
-			if(scriptFunction)
-				scriptFunction(id);
-			else
-				safe_cout << "Script did not have a hello function!\n";
-		} catch(const bp::error_already_set& /* e */) {
-			safe_cout << "Exception in script: ";
-			print_py_error();
-		}
-	} catch(const std::exception &e) {
-		safe_cout << "Exception in script: " << e.what() << "\n";
-	}
+    try
+    {
+        bp::object command1 = bp::import("command1");
+        bp::object test_class = command1.attr("TestClass")();
+        bp::object result = test_class.attr("TestFunc")();
+
+        if (result != NULL)
+        {
+            std::string str_val = bp::extract<std::string>(result);
+            safe_cout << str_val << " from thread: " << i << "\n";
+        }
+    }
+    catch(const bp::error_already_set& /*e*/)
+    {
+        print_py_error();
+    }
+    catch(const std::exception& e)
+    {
+        safe_cout << e.what();
+    }
+    catch(...)
+    {
+        safe_cout << "Unknown exception thrown";
+    }
 }
 
-void thread_proc(const int id, bp::dict localDict) {
-    logger safe_cout;
-	for (int i=0;i<thread_loops;i++) {
-		boost::posix_time::millisec time_to_sleep(rand()*delay/RAND_MAX);
-		std::stringstream ss;
-		ss << ">>> proc: " << id << "\n";
-		safe_cout << ss.str();
-		boost::this_thread::sleep(time_to_sleep);
-		call_python(localDict, id);
-	}
-}  
-
-int MAIN(int argc, const unicode_char* argv[]) {
+int main(int argc, const char* argv[])
+{
+    // Step 1: Initialize Python and enable thread support
+    //
+    // @note: It's important to ensure this is completed in the main thread of the application.
 	Py_Initialize();
 	PyEval_InitThreads();
-        
-    logger safe_cout;
 	
-    try	{
-		bp::object main_module = bp::import("__main__");
-		bp::dict globalDict = bp::extract<bp::dict>(main_module.attr("__dict__"));
-		bp::dict localDict = globalDict.copy();
+    // Step 2: Release the GIL from the main thread so that other threads can use it
+    PyEval_ReleaseThread(PyGILState_GetThisThreadState());
+    
+    // Step 3: Turn over to application processing
+    boost::thread_group threads;
+    for (int i = 0; i < 100; ++i)
+    {
+        threads.create_thread(std::bind(CallCommandFunc, i));
+    }
 
-		bp::object ignored = bp::exec(
-			"from TEST1 import hello_cpp\n"
-			"\n"
-			"def hello_python(id):\n"
-			"	hello_cpp(id)\n"
-			"\n"
-			, localDict, localDict);
+    threads.join_all();
+    
+    // Step 4: Lock the GIL before calling finalize
+    PyGILState_Ensure();
+    Py_Finalize();
 
-		PyThreadState *state = PyEval_SaveThread();
-
-		boost::thread_group threads;
-		for (int i=0;i<thread_count;i++)
-			threads.create_thread(boost::bind(&thread_proc, i, localDict));
-		safe_cout << ":::main: waiting for threads to join\n";
-		threads.join_all();  
-
-	} catch(const std::exception &e) {
-		safe_cout << "Exception in script: " << e.what() << "\n";
-	} catch(const bp::error_already_set& /* e */) {
-		safe_cout << "Exception in script: ";
-		print_py_error();
-	}
+	return 0;
 }

@@ -4,18 +4,10 @@
 
 #include "python_helpers.hpp"
 
-static int delay = 100;
-
-void hello(int id) {
-	release_py_GIL unlocker;
-    logger safe_cout;
-	std::stringstream ss;
-	ss << ">>> py: sleep: " << id << "\n";
-	safe_cout << ss.str();
-	boost::this_thread::sleep(boost::posix_time::millisec(rand()*delay/RAND_MAX));
-}
-
 BOOST_PYTHON_MODULE(TEST1)
 {
-	bp::def("hello_cpp", hello);
+    bp::class_<PythonDelayedCallback, boost::noncopyable>("DelayedCallback", bp::init<bp::object, float>())
+        .def_readwrite("callback", &PythonDelayedCallback::callback, "callback to set that will finish the event")
+        .def_readwrite("delay", &PythonDelayedCallback::delay, "delay that determines when the event will finish")
+        ;
 }

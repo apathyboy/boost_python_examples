@@ -17,4 +17,5 @@ link_directories(${Boost_LIBRARY_DIRS})
 
 add_subdirectory(greet)
 add_subdirectory(polymorphism)
+add_subdirectory(shell)
 add_subdirectory(state_saving)
